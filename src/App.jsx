@@ -39,6 +39,7 @@ import consultation from "./Assets/icon/6.webp";
 async function submitFormToFormSubmit(event, setStatus, setSubmitting) {
   event.preventDefault();
   const form = event.currentTarget;
+  if (!form.reportValidity()) return;
   setStatus("");
   setSubmitting(true);
   try {
@@ -47,9 +48,9 @@ async function submitFormToFormSubmit(event, setStatus, setSubmitting) {
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
     });
-    const result = await response.json();
+    const result = await response.json().catch(() => ({}));
     if (!response.ok || result.success === false) {
-      throw new Error(result.message || "The enquiry could not be sent. Please try again.");
+      throw new Error("The enquiry could not be sent. Please try again, or contact us by phone.");
     }
     setStatus("Thanks! Your enquiry has been sent.");
     form.reset();
@@ -74,7 +75,7 @@ const workVideoAssets = import.meta.glob("./Assets/video/*.mp4", {
 });
 const projectGallery = (slug) =>
   Object.entries(projectDetailAssets)
-    .filter(([path]) => path.includes(`/details/${slug}/`))
+    .filter(([path]) => path.includes(`/details/${slug === "akshay-builder" ? "factory" : slug}/`))
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, src]) => src);
 const workVideos = [
@@ -91,6 +92,70 @@ const workVideos = [
 
 const image = (id, width = 900) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=82`;
+
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return <NotFoundPage title="Something went wrong" />;
+    return this.props.children;
+  }
+}
+
+function NotFoundPage({ title = "Page not found" }) {
+  return (
+    <SiteShell active="">
+      <PageHero title={title} />
+      <section className="container" style={{ padding: "80px 0", textAlign: "center" }}>
+        <h2 className="section-title">We couldn’t find that page.</h2>
+        <p>The page may have moved, or the address may be incorrect.</p>
+        <a className="button" href="/">Return to Home</a>
+      </section>
+    </SiteShell>
+  );
+}
+
+const routeSeo = {
+  "/": ["Interior Design in Chennai | Smartview Interior", "Thoughtful home, kitchen and workspace interiors in Chennai, designed and crafted by Smartview Interior."],
+  "/about-us": ["About Smartview Interior | Chennai Interior Designers", "Meet the Smartview Interior team and learn about our interior design and wooden manufacturing work in Chennai."],
+  "/services": ["Interior Design & Modular Kitchen Services | Smartview", "Explore Smartview Interior’s modular kitchens, commercial interiors, wooden manufacturing, design and renovation services."],
+  "/projects": ["Interior Design Projects | Smartview Interior Chennai", "Browse completed residential and commercial interior projects by Smartview Interior."],
+  "/contact-us": ["Contact Smartview Interior | Chennai", "Contact Smartview Interior in Alapakkam, Chennai to discuss your interior design or renovation project."],
+  "/privacy-policy": ["Privacy Policy | Smartview Interior", "Read how Smartview Interior handles information submitted through this website."],
+};
+
+function updateSeo(path, project) {
+  const base = "https://smartviewinterior.com";
+  const exists = Boolean(project || routeSeo[path]);
+  const title = project ? `${project.title} | Smartview Interior` : (routeSeo[path]?.[0] || "Page not found | Smartview Interior");
+  const description = project ? `View the ${project.title} interior project by Smartview Interior.` : (routeSeo[path]?.[1] || "The requested page could not be found.");
+  document.title = title;
+  const put = (selector, attr, key, value) => {
+    let node = document.head.querySelector(selector);
+    if (!node) { node = document.createElement(selector.startsWith("meta") ? "meta" : "link"); document.head.appendChild(node); }
+    node.setAttribute(attr, key); node.setAttribute("content", value);
+  };
+  put('meta[name="description"]', "name", "description", description);
+  put('meta[name="robots"]', "name", "robots", exists ? "index,follow" : "noindex,follow");
+  const canonical = document.head.querySelector('link[rel="canonical"]') || document.head.appendChild(document.createElement("link"));
+  canonical.rel = "canonical"; canonical.href = `${base}${path === "/" ? "/" : path}`;
+  [["og:title", title], ["og:description", description], ["og:type", "website"], ["og:url", canonical.href], ["og:image", `${base}/favicon.webp`], ["twitter:card", "summary_large_image"], ["twitter:title", title], ["twitter:description", description], ["twitter:image", `${base}/favicon.webp`]].forEach(([property, content]) => {
+    let node = document.head.querySelector(`meta[property="${property}"],meta[name="${property}"]`);
+    if (!node) { node = document.createElement("meta"); node.setAttribute(property.startsWith("twitter:") ? "name" : "property", property); document.head.appendChild(node); }
+    node.content = content;
+  });
+  const business = { "@context": "https://schema.org", "@type": "LocalBusiness", additionalType: "https://schema.org/InteriorDesigner", name: "Smartview Interior", url: base, email: "smartviewinterior@gmail.com", telephone: "+91 73972 65883", address: { "@type": "PostalAddress", streetAddress: "No.15/A, G.K. Industrial Estate, Main Road, Arcot Road, Alapakkam", addressLocality: "Chennai", postalCode: "600116", addressCountry: "IN" } };
+  const graph = [business, { "@context": "https://schema.org", "@type": "Organization", name: "Smartview Interior", url: base, email: "smartviewinterior@gmail.com" }, { "@context": "https://schema.org", "@type": "WebSite", name: "Smartview Interior", url: base }];
+  if (path !== "/") graph.push({ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: base }, { "@type": "ListItem", position: 2, name: project?.title || routeSeo[path]?.[0]?.split("|")[0].trim() || "Not found", item: canonical.href }] });
+  let jsonLd = document.getElementById("smartview-jsonld");
+  if (!jsonLd) { jsonLd = document.createElement("script"); jsonLd.id = "smartview-jsonld"; jsonLd.type = "application/ld+json"; document.head.appendChild(jsonLd); }
+  jsonLd.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
+}
 const navItems = [
   ["Home", "/"],
   ["About Us", "/about-us"],
@@ -147,7 +212,7 @@ const projects = [
   ),
   makeProject("1by2 Office - T.Nager", "1by2-office-t-nager", "5-11.webp"),
   makeProject("Srinivasan - Mylapore", "srinivasan-mylapore", "8-9.webp"),
-  makeProject("Akshay Builder", "Akshay Builder", "1-13.webp"),
+  makeProject("Akshay Builder", "akshay-builder", "1-13.webp"),
   makeProject(
     "Shamala Site - Thoraipakkam",
     "shamala-site-thoraipakkam",
@@ -299,6 +364,7 @@ function Footer() {
             >
               <input type="hidden" name="_subject" value="New website enquiry - footer" />
               <input type="hidden" name="_template" value="table" />
+              <input type="text" name="_honey" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ display: "none" }} />
               <input required name="name" placeholder="Name" aria-label="Name" />
               <input
                 required
@@ -308,7 +374,7 @@ function Footer() {
                 aria-label="Email"
               />
               <button className="button" type="submit" disabled={footerFormSubmitting}>
-                {footerFormSubmitting ? "Sending�" : "Send"}
+                {footerFormSubmitting ? "Sending..." : "Send"}
               </button>
               {footerFormStatus && <p className="form-submit-status" role="status">{footerFormStatus}</p>}
             </form>
@@ -894,7 +960,7 @@ function PrivacyPolicyPage() {
         <div className="privacy-policy-layout">
         <article className="privacy-policy-content">
           <p className="privacy-policy-meta">
-            Smartview Interior � Last updated October 1, 2026
+            Smartview Interior &copy; Last updated October 1, 2026
           </p>
           <h2>Who we are</h2>
           <p>
@@ -1134,6 +1200,7 @@ function ContactPage() {
               >
                 <input type="hidden" name="_subject" value="New website enquiry - contact page" />
                 <input type="hidden" name="_template" value="table" />
+                <input type="text" name="_honey" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ display: "none" }} />
                 <div className="form-grid">
                   <label className="field">
                     First name *
@@ -1179,7 +1246,7 @@ function ContactPage() {
                   </label>
                   <div className="field full">
                     <button className="button" type="submit" disabled={contactFormSubmitting}>
-                      {contactFormSubmitting ? "Sending�" : "Send your enquiry"}
+                      {contactFormSubmitting ? "Sending..." : "Send your enquiry"}
                     </button>
                   </div>
                   {contactFormStatus && <p className="form-submit-status field full" role="status">{contactFormStatus}</p>}
@@ -1211,22 +1278,13 @@ function ContactPage() {
 }
 
 export default function App() {
-  useEffect(() => {
-    const path = window.location.pathname.replace(/\/$/, "") || "/";
-    const detailMatch = path.match(/^\/projects\/([^/]+)$/);
-    const selectedProject = detailMatch
-      ? projects.find((project) => project.slug === detailMatch[1])
-      : null;
-    const pageTitles = {
-      "/": "Home",
-      "/about-us": "About Us",
-      "/services": "Services",
-      "/projects": "Our Projects",
-      "/contact-us": "Contact Us",
-      "/privacy-policy": "Privacy Policy",
-    };
-    document.title = `${selectedProject?.title || pageTitles[path] || "Home"} | Smartview Interior`;
-  }, []);
+  const path = decodeURIComponent(window.location.pathname).replace(/\/$/, "") || "/";
+  const detailMatch = path.match(/^\/projects\/([^/]+)$/);
+  const selectedProject = detailMatch
+    ? projects.find((project) => project.slug === detailMatch[1].toLowerCase())
+    : null;
+
+  useEffect(() => updateSeo(path, selectedProject), [path, selectedProject]);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -1265,14 +1323,7 @@ export default function App() {
     return () => observer.disconnect();
   }, []);
 
-  const path = window.location.pathname.replace(/\/$/, "") || "/";
-  const detailMatch = path.match(/^\/projects\/([^/]+)$/);
-  if (detailMatch) {
-    const selectedProject = projects.find(
-      (project) => project.slug === detailMatch[1],
-    );
-    if (selectedProject) return <ProjectDetailPage project={selectedProject} />;
-  }
+  if (detailMatch) return selectedProject ? <ProjectDetailPage project={selectedProject} /> : <NotFoundPage />;
   switch (path) {
     case "/about-us":
       return <AboutPage />;
@@ -1285,6 +1336,6 @@ export default function App() {
     case "/privacy-policy":
       return <PrivacyPolicyPage />;
     default:
-      return <HomePage />;
+      return routeSeo[path] ? <HomePage /> : <NotFoundPage />;
   }
 }
